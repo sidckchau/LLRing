@@ -1,5 +1,5 @@
 # LLRing
-This repository contains the source code of the paper `LLRing: Logarithmic Linkable Ring Signatures with Transparent Setup` at the eprint link: [https://eprint.iacr.org/2024/421.pdf](https://eprint.iacr.org/2024/421.pdf).
+This repository contains the source code of the paper `LLRing: Logarithmic Linkable Ring Signatures with Transparent Setup` at: [https://eprint.iacr.org/2024/421.pdf](https://eprint.iacr.org/2024/421.pdf).
 
 `Note that the code is for research purpose only`.
 
