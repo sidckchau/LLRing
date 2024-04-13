@@ -12,7 +12,7 @@ There are four folders:
 
 To run the tests
 ------------------------
-Navigate to `src/main/java/RingSignature/Test.java` .
+Navigate to `src/main/java/RingSignature/Test.java`
 
 Execute:
 
