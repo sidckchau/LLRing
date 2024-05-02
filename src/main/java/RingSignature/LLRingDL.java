@@ -4,6 +4,8 @@ import Bulletproofs.SegregatedBulletproofs;
 import CurveOperation.G1Point;
 import Utils.HashUtils;
 import Utils.IntUtils;
+import Utils.TagDL;
+import Utils.TagP;
 import it.unisa.dia.gas.jpbc.Field;
 import it.unisa.dia.gas.jpbc.Pairing;
 import it.unisa.dia.gas.plaf.jpbc.pairing.PairingFactory;
@@ -15,6 +17,7 @@ public class LLRingDL {
     Pairing pairing = PairingFactory.getPairing("f.properties");
 
     Field G1 = pairing.getG1();
+
     BigInteger n = G1.getOrder();
     G1Point P = new G1Point(G1.newRandomElement());
 
@@ -32,6 +35,9 @@ public class LLRingDL {
     G1Point K;
 
     G1Point R;
+
+    TagDL tag;
+    String prefix = "f";
 
     int r_size;
 
@@ -52,6 +58,8 @@ public class LLRingDL {
         K = new G1Point(G1.newRandomElement());
         R = new G1Point(G1.newRandomElement());
 
+        tag = new TagDL(pairing, P, Q);
+
         for (int i = 0; i < size; i++) {
             sks[i] = Z.newRandomElement().toBigInteger();
             pks[i] = P.mul(sks[i]);
@@ -69,7 +77,7 @@ public class LLRingDL {
     public static void main(String[] args) {
         LLRingDL ring = new LLRingDL(16);
         Signature sig = ring.sign("123", 1);
-        System.out.println(ring.single_multi_verify("123",sig));
+        System.out.println(ring.single_multi_verify("123", sig));
 
 
     }
@@ -96,9 +104,8 @@ public class LLRingDL {
         G1Point cm = pks[index].add(Q.mul(r_cm));
         G1Point A_hat = Q.mul(r_A_hat).add(Rs[index]);
 
-
+        TagDL.Proof tag_pi = tag.tagGen(prefix, sks[index], r_cm);
         ///////////////////////////////////////////
-
 
 
         BigInteger[] s_1s = new BigInteger[r_size];
@@ -128,7 +135,7 @@ public class LLRingDL {
         G1Point S2 = Q.mul(r_S2)
                 .add(G1Point.mulAndSum(Hs, s_2s));
 
-        BigInteger z = HashUtils.hash(A,B, S1,S2).mod(this.n);
+        BigInteger z = HashUtils.hash(HashUtils.hash(A, B, S1, S2), HashUtils.hash(m)).mod(this.n);
         BigInteger y = HashUtils.hash(z).mod(this.n);
 
 
@@ -198,20 +205,13 @@ public class LLRingDL {
         G1Point W2 = G1Point.mulAndSum(H_ys, rs);
 
 
-
-
-
-
-        return new Signature(cm, A_hat, A, B, S1, S2, T_1, T_2, t_hat, tau_x, r_W1,r_W2, W1,W2, pi);
-
+        return new Signature(cm, A_hat, A, B, S1, S2, T_1, T_2, t_hat, tau_x, r_W1, r_W2, W1, W2, pi, tag_pi);
 
 
     }
 
 
-
-
-    public boolean single_multi_verify(String m, Signature sig){
+    public boolean single_multi_verify(String m, Signature sig) {
         G1Point cm = sig.cm;
         G1Point A_hat = sig.A_hat;
         G1Point A = sig.A;
@@ -227,21 +227,26 @@ public class LLRingDL {
         BigInteger r_W1 = sig.rW1;
         BigInteger r_W2 = sig.rW2;
 
-        G1Point W1 =sig.W1;
-        G1Point W2 =sig.W2;
+        G1Point W1 = sig.W1;
+        G1Point W2 = sig.W2;
 
-        SegregatedBulletproofs.Proof pi =sig.pi;
+        SegregatedBulletproofs.Proof pi = sig.pi;
 
 
-        BigInteger z = HashUtils.hash(A,B, S1,S2).mod(this.n);
+        BigInteger z = HashUtils.hash(HashUtils.hash(A, B, S1, S2), HashUtils.hash(m)).mod(this.n);
         BigInteger y = HashUtils.hash(z).mod(this.n);
         BigInteger x = HashUtils.hash(T_1, T_2).mod(n);
 
-        if (!A.isEqual(cm.add(A_hat))){
-            System.out.println("break1");
+        if (!tag.verify(sig.tag, prefix)) {
+            System.out.println("break0");
             return false;
         }
 
+
+        if (!A.isEqual(cm.add(A_hat))) {
+            System.out.println("break1");
+            return false;
+        }
 
 
         BigInteger[] zs = new BigInteger[r_size];
@@ -250,7 +255,6 @@ public class LLRingDL {
         BigInteger[] ones = new BigInteger[r_size];
         BigInteger[] v = new BigInteger[r_size];
         BigInteger[] mz = new BigInteger[r_size];
-
 
 
         for (int i = 0; i < r_size; i++) {
@@ -264,14 +268,14 @@ public class LLRingDL {
         }
 
 
-        BigInteger delta =((z.subtract(z.pow(2)).
-                        multiply(IntUtils.innerProd(ones,ys,n)
-                        )).subtract(z.pow(3).multiply(IntUtils.innerProd(ones,ones,n)))).add(z.pow(2)).mod(n);
+        BigInteger delta = ((z.subtract(z.pow(2)).
+                multiply(IntUtils.innerProd(ones, ys, n)
+                )).subtract(z.pow(3).multiply(IntUtils.innerProd(ones, ones, n)))).add(z.pow(2)).mod(n);
 
         G1Point ret1 = F.mul(t_hat).add(Q.mul(tau_x));
         G1Point ret2 = F.mul(delta).add(T_1.mul(x)).add(T_2.mul(x.pow(2).mod(n)));
 
-        if (!ret1.isEqual(ret2)){
+        if (!ret1.isEqual(ret2)) {
             System.out.println("break2");
             return false;
         }
@@ -281,8 +285,7 @@ public class LLRingDL {
         G1Point Z2 = W2.add(K.mul(t_hat));
 
 
-
-        for (int i = 0 ; i < pi.LRs.size(); i ++){
+        for (int i = 0; i < pi.LRs.size(); i++) {
             G1Point[] LR = pi.LRs.get(i);
 
             G1Point L1 = LR[0];
@@ -312,11 +315,11 @@ public class LLRingDL {
             BigInteger sum2 = BigInteger.ONE;
 
             for (int j = 0; j < pi.LRs.size(); j++) {
-                G1Point[] LR = pi.LRs.get(pi.LRs.size()-j-1);
+                G1Point[] LR = pi.LRs.get(pi.LRs.size() - j - 1);
                 BigInteger c = HashUtils.hash(LR);
                 BigInteger cinv = c.modInverse(n);
-                sum1 = sum1.multiply(check_bit(i,j,cinv)).mod(n);
-                sum2 = sum2.multiply(check_bit(i,j,c)).mod(n);
+                sum1 = sum1.multiply(check_bit(i, j, cinv)).mod(n);
+                sum2 = sum2.multiply(check_bit(i, j, c)).mod(n);
             }
             es1_1[i] = sum1.multiply(pi.a).mod(n);
             es2_1[i] = sum2.multiply(pi.b).multiply(ys[i].modInverse(n)).mod(n);
@@ -325,25 +328,22 @@ public class LLRingDL {
         }
 
 
+        es1_1 = IntUtils.v_add_v(es1_1, es1_2, n);
+        es2_1 = IntUtils.v_add_v(es2_1, es2_2, n);
 
-        es1_1 = IntUtils.v_add_v(es1_1,es1_2,n);
-        es2_1 = IntUtils.v_add_v(es2_1,es2_2,n);
-
-        BigInteger[] es = IntUtils.v_add_v(es1_1,es2_1,n);
+        BigInteger[] es = IntUtils.v_add_v(es1_1, es2_1, n);
 
 
-        G1Point ret3 =G1Point.mulAndSum(Gs,es).add(K.mul(pi.a.multiply(pi.b)));
+        G1Point ret3 = G1Point.mulAndSum(Gs, es).add(K.mul(pi.a.multiply(pi.b)));
 
         G1Point ret5 = ret3.add(A).add(S1.mul(x)).add(B).add(S2.mul(x));
 
         return ret5.isEqual(W1.add(Q.mul(r_W1).add(W2.add(Q.mul(r_W2)).add(Z1).add(Z2))));
     }
-    BigInteger check_bit(int i, int j, BigInteger a ){
+
+    BigInteger check_bit(int i, int j, BigInteger a) {
         return ((i >> j) & 1) == 1 ? a.modInverse(n) : a;
     }
-
-
-
 
 
     public class Signature {
@@ -369,7 +369,9 @@ public class LLRingDL {
 
         SegregatedBulletproofs.Proof pi;
 
-        public Signature(G1Point cm, G1Point a_hat, G1Point a, G1Point b, G1Point s1, G1Point s2, G1Point t_1, G1Point t_2, BigInteger t_hat, BigInteger tau_x, BigInteger rW1, BigInteger rW2, G1Point w1, G1Point w2, SegregatedBulletproofs.Proof pi) {
+        TagDL.Proof tag;
+
+        public Signature(G1Point cm, G1Point a_hat, G1Point a, G1Point b, G1Point s1, G1Point s2, G1Point t_1, G1Point t_2, BigInteger t_hat, BigInteger tau_x, BigInteger rW1, BigInteger rW2, G1Point w1, G1Point w2, SegregatedBulletproofs.Proof pi, TagDL.Proof tag) {
             this.cm = cm;
             A_hat = a_hat;
             A = a;
@@ -385,6 +387,7 @@ public class LLRingDL {
             W1 = w1;
             W2 = w2;
             this.pi = pi;
+            this.tag = tag;
         }
     }
 
