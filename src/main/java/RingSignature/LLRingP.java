@@ -6,6 +6,8 @@ import CurveOperation.GtPoint;
 import Dory.Dory_ZK;
 import Utils.HashUtils;
 import Utils.IntUtils;
+import Utils.TagDL;
+import Utils.TagP;
 import it.unisa.dia.gas.jpbc.Field;
 import it.unisa.dia.gas.jpbc.Pairing;
 import it.unisa.dia.gas.plaf.jpbc.pairing.PairingFactory;
@@ -25,6 +27,10 @@ public class LLRingP {
     G1Point P = new G1Point(G1.newRandomElement());
 
     Field Z = pairing.getZr();
+
+    String prefix = "f";
+
+    TagP tag;
 
     G1Point[] pks;
     G1Point[] Rs;
@@ -81,6 +87,8 @@ public class LLRingP {
 
 
         Q_t = new GtPoint(Gt.newRandomElement());
+
+        tag = new TagP(pairing,P,Q_t,L2);
 
 
 
@@ -140,6 +148,8 @@ public class LLRingP {
 
         GtPoint cm = GtPoint.pair(pks[index],L2 ).mul(Q_t.pow(r_cm));
 
+        TagP.Proof tag_pi = tag.tagGen(prefix, sks[index], r_cm);
+
         GtPoint A_hat = GtPoint.pair(Rs[index],L2).mul(Q_t.pow(r_A_hat));
 
         GtPoint B = GtPoint.pair(Gs[index],Hs[index]).mul(Q_t.pow(r_B));
@@ -148,7 +158,7 @@ public class LLRingP {
 
         BigInteger c = Z.newRandomElement().toBigInteger();
         GtPoint C = Pre_RL.pow(c).mul(Q_t.pow(r_C));
-        BigInteger phi = HashUtils.hash(C);
+        BigInteger phi = HashUtils.hash(HashUtils.hash(m),HashUtils.hash(C));
 
         BigInteger c_p = c.add(phi.multiply(HashUtils.hash(pks[index]))).mod(n);
         BigInteger r_Cp = r_C.add(phi.multiply(r_A_hat)).mod(n);
@@ -196,18 +206,23 @@ public class LLRingP {
 
 
 
-        return new Signature(cm,A_hat,B,C,X1,X2,c_p,r_Cp,pi1);
+        return new Signature(cm,A_hat,B,C,X1,X2,c_p,r_Cp,pi1, tag_pi);
 
 
     }
 
     public boolean verify(String m, Signature sig){
 
-        BigInteger phi = HashUtils.hash(sig.C);
+        BigInteger phi = HashUtils.hash(HashUtils.hash(m),HashUtils.hash(sig.C));
         GtPoint T0 = Pre_RL.pow(sig.c_p).mul(Q_t.pow(sig.r_Cp));
 
         if (!T0.isEqual(sig.C.mul(sig.A_hat.pow(phi)))){
             System.out.println("break sch");
+            return false;
+        }
+
+        if (!tag.verify(sig.tag, prefix)) {
+            System.out.println("break0");
             return false;
         }
 
@@ -277,8 +292,10 @@ public class LLRingP {
 
         Dory_ZK.Proof pi1;
 
+        TagP.Proof tag;
 
-        public Signature(GtPoint cm, GtPoint a_hat, GtPoint b,GtPoint c,GtPoint x1,GtPoint x2, BigInteger c_p, BigInteger r_Cp, Dory_ZK.Proof pi1) {
+
+        public Signature(GtPoint cm, GtPoint a_hat, GtPoint b,GtPoint c,GtPoint x1,GtPoint x2, BigInteger c_p, BigInteger r_Cp, Dory_ZK.Proof pi1, TagP.Proof tag) {
             this.cm = cm;
             A_hat = a_hat;
             B = b;
@@ -288,6 +305,7 @@ public class LLRingP {
             this.c_p = c_p;
             this.r_Cp = r_Cp;
             this.pi1 = pi1;
+            this.tag = tag;
         }
     }
 
